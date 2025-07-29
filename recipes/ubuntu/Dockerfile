@@ -2,6 +2,7 @@ FROM ubuntu:24.04
 
 SHELL ["/bin/bash", "-c"]
 
+# --- Base dependencies ---
 RUN apt-get update && \
     apt-get install -y \
     build-essential \
@@ -15,35 +16,26 @@ RUN apt-get update && \
     htop \
     nvtop \
     jq \
+    ffmpeg \
+    libgl1 \
     software-properties-common && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace
+# --- Python virtual environment ---
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip && \
+    /opt/venv/bin/pip install jupyterlab
 
-# Create a script file sourced by both interactive and non-interactive bash shells
-ENV BASH_ENV=/root/.bash_env
-RUN touch "${BASH_ENV}"
-RUN echo '. "${BASH_ENV}"' >> ~/.bashrc
+ENV PATH="/opt/venv/bin:$PATH"
+RUN echo "source /opt/venv/bin/activate" >> "/root/.bashrc"
 
-# Download and install nvm
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | PROFILE="${BASH_ENV}" bash
-RUN nvm install --lts && \
-    nvm use --lts && \
-    nvm alias default node
-
+# --- VS Code CLI setup ---
 RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64' -o vscode_cli.tar.gz && \
     tar -xf vscode_cli.tar.gz && \
     mv code /usr/local/bin/code && \
     rm vscode_cli.tar.gz
 
-RUN python3 -m venv /opt/venv && \
-    /opt/venv/bin/pip install --upgrade pip && \
-    /opt/venv/bin/pip install \
-    jupyterlab
-RUN echo "source /opt/venv/bin/activate" >> "/root/.bashrc"
-ENV PATH="/opt/venv/bin:$PATH"
-
-
+# --- JupyterLab config ---
 ENV JUPYTERLAB_DIR="/workspace/jupyterlab"
 ENV JUPYTERLAB_PORT=8888
 RUN mkdir -p /workspace/jupyterlab
@@ -51,20 +43,19 @@ RUN jupyter lab --generate-config && \
     echo "c.ServerApp.ip = '::'" >> /root/.jupyter/jupyter_server_config.py
 RUN jupyter lab build
 
-
-RUN apt update && apt install -y \
-    git wget ffmpeg libgl1 python3-pip
-
-RUN echo "source /opt/venv/bin/activate" >> "/root/.bashrc"
-ENV PATH="/opt/venv/bin:$PATH"    
-
-
+# --- Clone and install ComfyUI ---
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /root/ComfyUI
 RUN pip install -r /root/ComfyUI/requirements.txt
 
+# --- Launch script ---
+COPY launch.sh /workspace/launch.sh
+RUN chmod +x /workspace/launch.sh
 
-COPY . .
-RUN chmod +x launch.sh
-ENTRYPOINT ["/workspace/launch.sh"]
+# --- Set working directory ---
+WORKDIR /workspace
 
-CMD ["python3", "/root/ComfyUI/main.py", "--listen", "--port", "8188"]
+# --- Expose ComfyUI port ---
+EXPOSE 8188
+
+# --- Launch ComfyUI automatically ---
+CMD ["/workspace/launch.sh"]
