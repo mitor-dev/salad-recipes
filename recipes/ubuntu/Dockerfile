@@ -52,8 +52,19 @@ RUN jupyter lab --generate-config && \
 RUN jupyter lab build
 
 
+RUN apt update && apt install -y \
+    git wget ffmpeg libgl1 python3-pip
+
+RUN echo "source /opt/venv/bin/activate" >> "/root/.bashrc"
+ENV PATH="/opt/venv/bin:$PATH"    
+
+
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git /root/ComfyUI
+RUN pip install -r /root/ComfyUI/requirements.txt
+
+
 COPY . .
 RUN chmod +x launch.sh
 ENTRYPOINT ["/workspace/launch.sh"]
 
-CMD ["sleep", "infinity"]
+CMD ["python3", "/root/ComfyUI/main.py", "--listen", "--port", "8188"]
